@@ -1,0 +1,8 @@
+# Для автодеплоя: образ подставляется из CI (GitHub — IMAGE/TAG, GitLab — CI_REGISTRY_IMAGE/CI_COMMIT_SHORT_SHA)
+# Локально: docker compose build && IMAGE=kpfu-edu-bot TAG=latest docker compose up -d
+services:
+  bot:
+    image: ${IMAGE:-${CI_REGISTRY_IMAGE:-kpfu-edu-bot}}:${TAG:-${CI_COMMIT_SHORT_SHA:-latest}}
+    env_file: .env
+    restart: unless-stopped
+    container_name: kpfu-edu-bot
