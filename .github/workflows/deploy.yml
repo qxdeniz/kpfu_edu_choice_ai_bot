@@ -83,6 +83,6 @@ jobs:
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
             export IMAGE=${{ steps.img.outputs.image }}
             export TAG=latest
-            docker compose pull
-            docker compose up -d
+            docker-compose pull
+            docker-compose up -d
             docker image prune -f
