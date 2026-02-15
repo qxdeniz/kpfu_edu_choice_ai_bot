@@ -7,7 +7,7 @@ from telebot import types
 import os
 import sys
 from dotenv import load_dotenv
-
+import time
 # Загружаем переменные окружения из .env файла
 load_dotenv()
 print("test d")
@@ -666,9 +666,10 @@ def get_institutes_for_subdirection(direction, sub_direction, state):
     
     return []
 
-if __name__ == "__main__":
-    logger.info("Запуск бота...")
+while True:
     try:
-        bot.polling(none_stop=True, interval=0)
+        logger.info("Запуск бота...")
+        bot.polling(none_stop=True, timeout=90)
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+        time.sleep(5)
+        continue
