@@ -53,8 +53,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    # Запускать только если заданы секреты деплоя (иначе шаг можно закомментировать)
-    if: ${{ secrets.DEPLOY_HOST != '' }}
+    # Если деплой не нужен — закомментируйте весь job deploy выше
     steps:
       - name: Set image env for deploy
         id: img
