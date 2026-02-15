@@ -59,7 +59,8 @@ jobs:
         id: img
         run: |
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "image=${{ env.REGISTRY }}/${REPO_LC}:latest" >> $GITHUB_OUTPUT
+          # Имя образа без тега — в compose подставляется как ${IMAGE}:${TAG}
+          echo "image=${{ env.REGISTRY }}/${REPO_LC}" >> $GITHUB_OUTPUT
 
       - name: Prepare SSH key
         env:
@@ -81,7 +82,7 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH || '/opt/kpfu-bot' }}
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
-            export IMAGE=${{ steps.img.outputs.image }}
+            export IMAGE="${{ steps.img.outputs.image }}"
             export TAG=latest
             docker-compose pull
             docker-compose up -d
