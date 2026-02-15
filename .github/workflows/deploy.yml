@@ -67,6 +67,8 @@ jobs:
         run: |
           echo "$DEPLOY_SSH_KEY" > deploy_key
           chmod 600 deploy_key
+          # Контейнер ssh-action читает файл под другим пользователем — даём read для всех
+          chmod 644 deploy_key
 
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
