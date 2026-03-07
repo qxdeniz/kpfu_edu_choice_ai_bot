@@ -1,7 +1,8 @@
 """
 Сервис для подбора образовательных программ
 """
-from typing import List, Dict, Any
+import re
+from typing import List, Dict, Any, Optional, Tuple
 from services.llm_service import LLMService
 from utils.data_loader import data_loader
 from utils.institute_validator import institute_validator
@@ -12,124 +13,235 @@ class ProgramMatcher:
     
     def __init__(self):
         self.llm = LLMService()
+        self._current_programs: List[Dict] = []
     
     def find_best_program(self, user_data: dict, institute_codes: List[str]) -> str:
         """Найти наиболее подходящую программу"""
         try:
-            # Загружаем программы для выбранных институтов
             programs = data_loader.get_programs_by_institutes(institute_codes)
             
-            # Фильтруем по бюджету, если нужно
             if user_data.get('budget_only'):
                 programs = data_loader.filter_programs_by_budget(programs, budget_only=True)
             
-            # Фильтруем по статусу иностранного студента
             is_foreign = user_data.get('is_foreign', False)
             programs = data_loader.filter_programs_by_foreign(programs, is_foreign=is_foreign)
             
             if not programs:
                 return "К сожалению, не найдено подходящих программ по вашим критериям."
             
-            # Формируем промпт для LLM
+            self._current_programs = programs
+            
             prompt = self._build_matching_prompt(user_data, programs, institute_codes)
             
-            # Генерируем ответ
             result = self.llm.generate_response(prompt)
             
-            # Валидируем и исправляем названия институтов
-            result = institute_validator.validate_and_fix_response(result, institute_codes)
+            program_number, justification = self._parse_llm_response(result)
+            
+            if program_number is None or program_number < 1 or program_number > len(programs):
+                logger.warning(f"Не удалось определить номер программы. LLM ответ: {result}")
+                return "Не удалось точно определить подходящую программу. Попробуйте уточнить ваши предпочтения."
+            
+            selected_program = programs[program_number - 1]
+            
+            result = self._format_result(selected_program, institute_codes, justification)
             
             return result
         except Exception as e:
             logger.error(f"Ошибка при подборе программы: {e}", exc_info=True)
             return "Извините, произошла ошибка при подборе программы. Попробуйте позже."
     
+    def _parse_llm_response(self, response: str) -> Tuple[Optional[int], str]:
+        """Извлечь номер программы и обоснование из ответа LLM"""
+        lines = response.strip().split('\n')
+        
+        program_number = None
+        justification_lines = []
+        justification_started = False
+        
+        for line in lines:
+            line = line.strip()
+            
+            if not line:
+                continue
+            
+            if not justification_started:
+                match = re.search(r'^\[?(\d+)\]?(?:\.|\)|:|-)', line)
+                if match:
+                    program_number = int(match.group(1))
+                    justification_started = True
+                    remainder = line[match.end():].strip()
+                    if remainder:
+                        justification_lines.append(remainder)
+                    continue
+                
+                match = re.search(r'номер\s*[:\-]?\s*(\d+)', line, re.IGNORECASE)
+                if match:
+                    program_number = int(match.group(1))
+                    justification_started = True
+                    continue
+            else:
+                justification_lines.append(line)
+        
+        justification = ' '.join(justification_lines).strip()
+        
+        if not justification and program_number is not None:
+            justification = "Программа выбрана на основе анализа ваших интересов и данных."
+        
+        return program_number, justification
+    
+    def _format_result(self, program: Dict, institute_codes: List[str], justification: str) -> str:
+        """Форматировать результат с данными из JSON и обоснованием от LLM"""
+        institute_code = program.get("institute", "")
+        institute_name = data_loader.get_institute_name(institute_code)
+        
+        budget = program.get("budget_places", 0)
+        contract = program.get("contract_places", 0)
+        
+        places_info = f"Бюджетных мест: {budget}, контрактных мест: {contract}"
+        
+        result = f"""{institute_name}
+
+Образовательная программа:
+- Название: {program.get('name', '')}
+- Профиль: {program.get('profile', '')}
+- Код: {program.get('code', '')}
+- Уровень: {program.get('level', '')}
+- Срок обучения: {program.get('duration', '')}
+- Форма обучения: {program.get('form', '')}
+- {places_info}
+- Описание: {program.get('specifics', '')}
+
+Обоснование выбора: {justification}"""
+        
+        return result
+    
     def find_alternative_programs(self, user_data: dict, previous_recommendation: str) -> str:
         """Найти альтернативные программы"""
         try:
             institute_codes = user_data.get('institutes', [])
-            programs = data_loader.get_all_programs()
+            all_programs = data_loader.get_all_programs()
             
-            # Фильтруем программы
             if user_data.get('budget_only'):
-                programs = data_loader.filter_programs_by_budget(programs, budget_only=True)
+                all_programs = data_loader.filter_programs_by_budget(all_programs, budget_only=True)
             
             is_foreign = user_data.get('is_foreign', False)
-            programs = data_loader.filter_programs_by_foreign(programs, is_foreign=is_foreign)
+            all_programs = data_loader.filter_programs_by_foreign(all_programs, is_foreign=is_foreign)
             
-            # Получаем все уникальные названия институтов из программ
-            all_institute_names = set()
-            for program in programs:
-                inst_code = program.get("institute", "")
-                if inst_code:
-                    # Получаем полное название по коду
-                    inst_name = data_loader.get_institute_name(inst_code)
-                    if inst_name:
-                        all_institute_names.add(inst_name)
+            if len(all_programs) < 3:
+                return "Недостаточно программ для поиска альтернатив."
             
-            institute_names_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(sorted(all_institute_names))])
+            programs_text = self._format_programs_with_numbers(all_programs)
             
             prompt = f"""
 Ты консультант приёмной комиссии Казанского Федерального Университета. Абитуриент предварительно определился с итоговой программой для обучения в КФУ, 
-тебе нужно подобрать ещё 2 альтернативные программы обучения в КФУ, которые также могут подойти этому абитуренту.
+тебе нужно подобрать ещё 2 альтернативные программы обучения в КФУ, которые также могут подойти этому абитуриенту.
 
-Подбери ещё 2 образовательные программы из институтов, которые подойдут этому абитуренту на основе его ответов на вопросы и интересов. 
-Не выбирай ту же программу, что и в первый раз! ВЫБЕРИ ИМЕННО ТЕ ПРОГРАММЫ, КОТОРЫЕ ЕСТЬ В СПИСКЕ ПРОГРАММ НИЖЕ!
-
-ДОСТУПНЫЕ ИНСТИТУТЫ (используй ТОЛЬКО эти названия, без изменений):
-{institute_names_list}
-
-КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ИСПОЛЬЗОВАНИЯ НАЗВАНИЙ:
-1. Для каждой программы укажи ТОЧНОЕ название института из списка выше
-2. НЕ изменяй, НЕ сокращай и НЕ перефразируй названия
-3. НЕ выдумывай новые названия институтов
-4. Скопируй название БУКВА В БУКВУ из списка выше
-
-Формат ответа для каждой программы (СТРОГО соблюдай):
-[ТОЧНОЕ НАЗВАНИЕ ИНСТИТУТА ИЗ СПИСКА ВЫШЕ]
-
-Образовательная программа:
-- Название: [название из списка программ]
-- Код: [код из списка программ]
-- Описание: [описание программы]
-- Количество мест: [бюджет/контракт из списка]
-
-Объяснение, почему она подойдёт: [твое объяснение]
-
-Оценка шанса поступления: [оценка]
+Подбери ещё 2 образовательные программы из списка ниже, которые также могут подойти этому абитуриенту на основе его ответов на вопросы и интересов.
+ВЫБЕРИ ИМЕННО ТЕ ПРОГРАММЫ, КОТОРЫЕ ЕСТЬ В СПИСКЕ НИЖЕ!
 
 Входные данные:
-Резюме абитурента:
+Резюме абитуриента:
 {self._format_user_resume(user_data)}
 
 Выбранная ранее программа:
 {previous_recommendation}
 
-Все доступные программы:
-{self._format_programs(programs)}
+КРИТИЧЕСКИ ВАЖНО! ВЫБОР ПРОГРАММ:
+1. Проанализируй ВСЕ пронумерованные программы ниже
+2. Выбери 2 НАИБОЛЕЕ ПОДХОДЯЩИЕ программы (отличные от выбранной ранее)
+3. В ответе укажи 2 номера программ и обоснование для каждой
+4. НЕ описывай программы полностью - данные о программах будут добавлены автоматически из базы данных
+
+Формат ответа (СТРОГО соблюдай):
+[НОМЕР ПРОГРАММЫ 1]: [Обоснование почему эта программа подойдёт]
+
+[НОМЕР ПРОГРАММЫ 2]: [Обоснование почему эта программа подойдёт]
+
+Пример ответа:
+5: Эта программа подходит абитуриенту, так как она ориентирована на практическое применение математики в экономике.
+12: Данная программа позволит студенту развить навыки программирования и работы с данными.
+
+Все доступные программы (пронумерованный список):
+{programs_text}
 """
             result = self.llm.generate_response(prompt)
             
-            # Валидируем ответ (для альтернативных программ проверяем все институты)
-            all_codes = data_loader._data.get("institutes", {}).keys()
-            result = institute_validator.validate_and_fix_response(result, list(all_codes))
+            program_numbers = self._parse_multiple_programs(result)
             
-            return result
+            if not program_numbers or len(program_numbers) < 2:
+                logger.warning(f"Не удалось определить номера альтернативных программ. LLM ответ: {result}")
+                return "Не удалось подобрать альтернативные программы. Попробуйте позже."
+            
+            alt_programs = []
+            for num in program_numbers[:2]:
+                if 1 <= num <= len(all_programs):
+                    alt_programs.append(all_programs[num - 1])
+            
+            response_parts = []
+            for i, prog in enumerate(alt_programs):
+                institute_code = prog.get("institute", "")
+                institute_name = data_loader.get_institute_name(institute_code)
+                budget = prog.get("budget_places", 0)
+                contract = prog.get("contract_places", 0)
+                
+                justification = ""
+                if i < len(program_numbers) - 1:
+                    lines = result.split('\n')
+                    for line in lines:
+                        if f"{program_numbers[i]}" in line:
+                            justification = line.split(':', 1)[1].strip() if ':' in line else ""
+                            break
+                
+                response_parts.append(f"""Институт: {institute_name}
+Образовательная программа:
+- Название: {prog.get('name', '')}
+- Профиль: {prog.get('profile', '')}
+- Код: {prog.get('code', '')}
+- Уровень: {prog.get('level', '')}
+- Срок обучения: {prog.get('duration', '')}
+- Форма обучения: {prog.get('form', '')}
+- Бюджетных мест: {budget}, контрактных мест: {contract}
+- Описание: {prog.get('specifics', '')}
+
+Обоснование выбора: {justification if justification else 'Программа выбрана как альтернативная.'}""")
+            
+            return "\n\n---\n\n".join(response_parts)
+            
         except Exception as e:
             logger.error(f"Ошибка при подборе альтернативных программ: {e}", exc_info=True)
             return "Извините, произошла ошибка. Попробуйте позже."
+    
+    def _parse_multiple_programs(self, response: str) -> List[int]:
+        """Извлечь несколько номеров программ из ответа LLM"""
+        program_numbers = []
+        lines = response.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            match = re.search(r'^\[?(\d+)\]?(?:\.|\)|:|-)', line)
+            if match:
+                program_numbers.append(int(match.group(1)))
+                continue
+            
+            match = re.search(r'номер\s*[:\-]?\s*(\d+)', line, re.IGNORECASE)
+            if match:
+                program_numbers.append(int(match.group(1)))
+        
+        return program_numbers
     
     def _build_matching_prompt(self, user_data: dict, programs: List[Dict], institute_codes: List[str]) -> str:
         """Построение промпта для подбора программы"""
         import json
         
-        # Получаем названия институтов
         institute_names = [data_loader.get_institute_name(code) for code in institute_codes]
         
         resume = self._format_user_resume(user_data)
-        programs_json = json.dumps(programs, ensure_ascii=False, indent=2)
         
-        # Формируем список названий для промпта
+        programs_text = self._format_programs_with_numbers(programs)
+        
         institute_names_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(institute_names)])
         
         prompt = f"""
@@ -140,37 +252,47 @@ class ProgramMatcher:
 Для этого проанализируй информацию о пользователе и описание учебных программ института / институтов, которые выбрала экспертная система, 
 и подбери наиболее подходящую программу, где этому студенту будет интересно учиться!
 
-ДОСТУПНЫЕ ИНСТИТУТЫ (используй ТОЛЬКО эти названия, без изменений):
-{institute_names_list}
-
-КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ИСПОЛЬЗОВАНИЯ НАЗВАНИЙ:
-1. В ответе НА ПЕРВОЙ СТРОКЕ укажи ТОЧНО одно из названий выше
-2. НЕ изменяй, НЕ сокращай и НЕ перефразируй названия
-3. НЕ выдумывай новые названия институтов
-4. Скопируй название БУКВА В БУКВУ из списка выше
-
 Входные данные:
 {resume}
 
-Также продумай подробное объяснение, почему ты выбрал именно такую программу
+КРИТИЧЕСКИ ВАЖНО! ВЫБОР ПРОГРАММЫ:
+1. Проанализируй ВСЕ пронумерованные программы ниже
+2. Выбери ОДНУ наиболее подходящую программу
+3. В ответе укажи ТОЛЬКО номер выбранной программы и обоснование выбора
+4. НЕ описывай программу полностью - данные о программе будут добавлены автоматически из базы данных
 
-Формат ответа (СТРОГО соблюдай этот формат):
-[ТОЧНОЕ НАЗВАНИЕ ИНСТИТУТА ИЗ СПИСКА ВЫШЕ - СКОПИРУЙ БУКВА В БУКВУ]
+Формат ответа (СТРОГО соблюдай):
+[НОМЕР ПРОГРАММЫ]: [Обоснование почему эта программа подойдёт абитуриенту]
 
-Образовательная программа:
-- Название: [название из списка программ]
-- Код: [код из списка программ]
-- Описание: [описание программы]
-- Количество мест: [бюджет/контракт из списка]
+Пример ответа:
+3: Эта программа идеально подходит абитуриенту, так как она ориентирована на изучение современных технологий программирования, что соответствует его интересам в IT-сфере.
 
-Объяснение, почему программа подойдёт: [твое объяснение]
-
-Оценка шанса поступления: [оценка на основе баллов ЕГЭ]
-
-Образовательные программы, из которых нужно выбрать одну:
-{programs_json}
+Образовательные программы (пронумерованный список):
+{programs_text}
 """
         return prompt
+    
+    def _format_programs_with_numbers(self, programs: List[Dict]) -> str:
+        """Форматирование списка программ с номерами"""
+        lines = []
+        for i, program in enumerate(programs, 1):
+            name = program.get('name', '')
+            profile = program.get('profile', '')
+            code = program.get('code', '')
+            duration = program.get('duration', '')
+            budget = program.get('budget_places', 0)
+            contract = program.get('contract_places', 0)
+            specifics = program.get('specifics', '')
+            
+            lines.append(f"{i}. {name}")
+            if profile:
+                lines.append(f"   Профиль: {profile}")
+            lines.append(f"   Код: {code}, Срок: {duration}, Места: {budget}б/{contract}к")
+            if specifics:
+                lines.append(f"   Описание: {specifics}")
+            lines.append("")
+        
+        return "\n".join(lines)
     
     def _format_user_resume(self, user_data: dict) -> str:
         """Форматирование резюме пользователя"""
