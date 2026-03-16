@@ -11,7 +11,12 @@ load_dotenv()
 # Базовые пути
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR
+
+# Основная база программ (бакалавриат / специалитет)
 PROGRAMS_FILE = DATA_DIR / "kfu_programs_by_institute.json"
+
+# База программ магистратуры
+MAG_PROGRAMS_FILE = DATA_DIR / "mag_baz.json"
 
 # Telegram Bot настройки
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

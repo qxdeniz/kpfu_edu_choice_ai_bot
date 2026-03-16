@@ -37,9 +37,8 @@ def get_education_level_menu():
     """Меню уровня образования"""
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.add(
-        types.KeyboardButton('Бакалавриат')
-       # types.KeyboardButton('Специалитет'),
-       # types.KeyboardButton('Магистратура')
+        types.KeyboardButton('Бакалавриат'),
+        types.KeyboardButton('Магистратура')
     )
     return menu
 

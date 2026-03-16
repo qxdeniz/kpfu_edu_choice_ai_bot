@@ -4,7 +4,7 @@
 import re
 from typing import List, Dict, Any, Optional, Tuple
 from services.llm_service import LLMService
-from utils.data_loader import data_loader
+from utils.data_loader import data_loader, mag_data_loader
 from utils.institute_validator import institute_validator
 from utils.logger import logger
 
@@ -18,13 +18,16 @@ class ProgramMatcher:
     def find_best_program(self, user_data: dict, institute_codes: List[str]) -> str:
         """Найти наиболее подходящую программу"""
         try:
-            programs = data_loader.get_programs_by_institutes(institute_codes)
+            education_level = user_data.get("education_level")
+            loader = mag_data_loader if education_level == "Магистратура" else data_loader
+
+            programs = loader.get_programs_by_institutes(institute_codes)
             
             if user_data.get('budget_only'):
-                programs = data_loader.filter_programs_by_budget(programs, budget_only=True)
+                programs = loader.filter_programs_by_budget(programs, budget_only=True)
             
             is_foreign = user_data.get('is_foreign', False)
-            programs = data_loader.filter_programs_by_foreign(programs, is_foreign=is_foreign)
+            programs = loader.filter_programs_by_foreign(programs, is_foreign=is_foreign)
             
             # Для Набережных Челнов: фильтр по выбранной форме обучения
             preferred_form = user_data.get('preferred_form')
@@ -124,15 +127,18 @@ class ProgramMatcher:
         """Найти альтернативные программы"""
         try:
             institute_codes = user_data.get('institutes', [])
-            all_programs = data_loader.get_all_programs()
+            education_level = user_data.get("education_level")
+            loader = mag_data_loader if education_level == "Магистратура" else data_loader
+
+            all_programs = loader.get_all_programs()
             # Для Набережных Челнов ограничиваем альтернативы выбранными институтами
             if user_data.get('preferred_form') and institute_codes:
                 all_programs = [p for p in all_programs if p.get('institute') in institute_codes]
             if user_data.get('budget_only'):
-                all_programs = data_loader.filter_programs_by_budget(all_programs, budget_only=True)
+                all_programs = loader.filter_programs_by_budget(all_programs, budget_only=True)
             
             is_foreign = user_data.get('is_foreign', False)
-            all_programs = data_loader.filter_programs_by_foreign(all_programs, is_foreign=is_foreign)
+            all_programs = loader.filter_programs_by_foreign(all_programs, is_foreign=is_foreign)
             
             preferred_form = user_data.get('preferred_form')
             if preferred_form:
@@ -191,7 +197,7 @@ class ProgramMatcher:
             response_parts = []
             for i, prog in enumerate(alt_programs):
                 institute_code = prog.get("institute", "")
-                institute_name = data_loader.get_institute_name(institute_code)
+                institute_name = loader.get_institute_name(institute_code)
                 budget = prog.get("budget_places", 0)
                 contract = prog.get("contract_places", 0)
                 

@@ -184,7 +184,8 @@ def handle_education_level(message, state):
     
     state.update(education_level=message.text)
     
-    if "бакалавр" in message.text.lower() or message.text == "Бакалавриат":
+    # Бакалавриат и магистратура используют единый опрос о профиле и интересах
+    if message.text in ("Бакалавриат", "Магистратура") or "бакалавр" in message.text.lower():
         bot.send_message(
             message.chat.id,
             "1️⃣ Кратко расскажите о себе. Чем Вы интересуетесь, какие у вас хобби и увлечения?",
@@ -194,7 +195,7 @@ def handle_education_level(message, state):
     else:
         bot.send_message(
             message.chat.id,
-            "Для специалитета и магистратуры функционал находится в разработке. Пожалуйста, выберите бакалавриат.",
+            "Для выбранного уровня обучения функционал находится в разработке. Пожалуйста, выберите бакалавриат или магистратуру.",
             reply_markup=get_education_level_menu()
         )
 
@@ -240,12 +241,21 @@ def handle_budget_only(message, state):
     budget_only = message.text.lower() == "да"
     state.update(budget_only=budget_only)
     
-    bot.send_message(
-        message.chat.id,
-        "📝 Вы уже сдали ЕГЭ?",
-        reply_markup=get_ege_status_menu()
-    )
-    state.step = "ege_status"
+    # Для бакалавриата продолжаем ветку с ЕГЭ, для магистратуры сразу переходим к выбору направления
+    if state.get("education_level") == "Магистратура":
+        bot.send_message(
+            message.chat.id,
+            "🎯 Какая область магистратуры Вам интересна?",
+            reply_markup=get_directions_menu()
+        )
+        state.step = "direction_selection"
+    else:
+        bot.send_message(
+            message.chat.id,
+            "📝 Вы уже сдали ЕГЭ?",
+            reply_markup=get_ege_status_menu()
+        )
+        state.step = "ege_status"
 
 def handle_ege_status(message, state):
     """Обработка статуса ЕГЭ"""
@@ -459,24 +469,26 @@ def handle_direction_selection(message, state):
     
     state.update(direction=direction, institutes=institutes, interest_area=direction)
     
-    # Если ЕГЭ не сданы, показываем рекомендации
-    if not state.get("exams"):
-        advice = EGEChecker.generate_ege_advice(
-            institutes, 
-            user_exams=None,
-            user_scores=None
-        )
-        bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
-    else:
-        # Если ЕГЭ сданы, проверяем совместимость и показываем результат
-        user_exams = state.get("exams", [])
-        user_scores = state.get("exams_scores_dict", {})
-        advice = EGEChecker.generate_ege_advice(
-            institutes,
-            user_exams=user_exams,
-            user_scores=user_scores if user_scores else None
-        )
-        bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
+    # Для магистратуры не даём советов по ЕГЭ
+    if state.get("education_level") != "Магистратура":
+        # Если ЕГЭ не сданы, показываем рекомендации
+        if not state.get("exams"):
+            advice = EGEChecker.generate_ege_advice(
+                institutes, 
+                user_exams=None,
+                user_scores=None
+            )
+            bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
+        else:
+            # Если ЕГЭ сданы, проверяем совместимость и показываем результат
+            user_exams = state.get("exams", [])
+            user_scores = state.get("exams_scores_dict", {})
+            advice = EGEChecker.generate_ege_advice(
+                institutes,
+                user_exams=user_exams,
+                user_scores=user_scores if user_scores else None
+            )
+            bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
     
     # Проверяем, нужно ли уточнение
     if direction in DIRECTION_TO_INSTITUTES and isinstance(DIRECTION_TO_INSTITUTES[direction], dict):
@@ -547,24 +559,26 @@ def handle_direction_sub_selection(message, state):
     institutes = get_institutes_for_subdirection(direction, sub_direction, state)
     state.update(institutes=institutes, interest_area=sub_direction)
     
-    # Если ЕГЭ не сданы, показываем рекомендации
-    if not state.get("exams"):
-        advice = EGEChecker.generate_ege_advice(
-            institutes,
-            user_exams=None,
-            user_scores=None
-        )
-        bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
-    else:
-        # Если ЕГЭ сданы, проверяем совместимость
-        user_exams = state.get("exams", [])
-        user_scores = state.get("exams_scores_dict", {})
-        advice = EGEChecker.generate_ege_advice(
-            institutes,
-            user_exams=user_exams,
-            user_scores=user_scores if user_scores else None
-        )
-        bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
+    # Для магистратуры не даём советов по ЕГЭ
+    if state.get("education_level") != "Магистратура":
+        # Если ЕГЭ не сданы, показываем рекомендации
+        if not state.get("exams"):
+            advice = EGEChecker.generate_ege_advice(
+                institutes,
+                user_exams=None,
+                user_scores=None
+            )
+            bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
+        else:
+            # Если ЕГЭ сданы, проверяем совместимость
+            user_exams = state.get("exams", [])
+            user_scores = state.get("exams_scores_dict", {})
+            advice = EGEChecker.generate_ege_advice(
+                institutes,
+                user_exams=user_exams,
+                user_scores=user_scores if user_scores else None
+            )
+            bot.send_message(message.chat.id, advice, reply_markup=types.ReplyKeyboardRemove())
     
     proceed_to_questions(message, state)
 
@@ -580,8 +594,12 @@ def proceed_to_questions(message, state):
         logger.warning(f"Не удалось определить институты для пользователя {message.chat.id}")
         return
     
-    # Загружаем программы
-    programs = data_loader.get_programs_by_institutes(institutes)
+    # Загружаем программы: для магистратуры используем отдельную базу
+    education_level = state.get("education_level")
+    from utils.data_loader import data_loader, mag_data_loader
+    loader = mag_data_loader if education_level == "Магистратура" else data_loader
+
+    programs = loader.get_programs_by_institutes(institutes)
     
     # Формируем данные для генератора вопросов
     user_data = {
@@ -636,6 +654,7 @@ def find_program(message, state):
         "subjects": state.get("subjects", ""),
         "activities": state.get("activities", ""),
         "interest_area": state.get("interest_area", ""),
+        "education_level": state.get("education_level"),
         "is_foreign": state.get("is_foreign", False),
         "budget_only": state.get("budget_only", False),
         "exams": state.get("exams", []),
