@@ -12,7 +12,8 @@ COPY bot.py config.py btns.py llm.py system.py .
 COPY handlers/ handlers/
 COPY services/ services/
 COPY utils/ utils/
-COPY kfu_programs_by_institute.json kfu_programs.json full_decision_tree.json .
+# Основные JSON-файлы с программами
+COPY kfu_programs_by_institute.json kfu_programs.json full_decision_tree.json mag_baz.json .
 
 # Переменные окружения передаются при запуске (env_file или --env)
 # Точка входа
