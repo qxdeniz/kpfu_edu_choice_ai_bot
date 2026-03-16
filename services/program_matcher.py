@@ -26,6 +26,11 @@ class ProgramMatcher:
             is_foreign = user_data.get('is_foreign', False)
             programs = data_loader.filter_programs_by_foreign(programs, is_foreign=is_foreign)
             
+            # Для Набережных Челнов: фильтр по выбранной форме обучения
+            preferred_form = user_data.get('preferred_form')
+            if preferred_form:
+                programs = [p for p in programs if (p.get('form') or '').strip() == preferred_form]
+            
             if not programs:
                 return "К сожалению, не найдено подходящих программ по вашим критериям."
             
@@ -120,12 +125,18 @@ class ProgramMatcher:
         try:
             institute_codes = user_data.get('institutes', [])
             all_programs = data_loader.get_all_programs()
-            
+            # Для Набережных Челнов ограничиваем альтернативы выбранными институтами
+            if user_data.get('preferred_form') and institute_codes:
+                all_programs = [p for p in all_programs if p.get('institute') in institute_codes]
             if user_data.get('budget_only'):
                 all_programs = data_loader.filter_programs_by_budget(all_programs, budget_only=True)
             
             is_foreign = user_data.get('is_foreign', False)
             all_programs = data_loader.filter_programs_by_foreign(all_programs, is_foreign=is_foreign)
+            
+            preferred_form = user_data.get('preferred_form')
+            if preferred_form:
+                all_programs = [p for p in all_programs if (p.get('form') or '').strip() == preferred_form]
             
             if len(all_programs) < 3:
                 return "Недостаточно программ для поиска альтернатив."
@@ -319,6 +330,8 @@ class ProgramMatcher:
         parts.append(f"\nИнностранный абитуриент: {'Да' if user_data.get('is_foreign') else 'Нет'}")
         if user_data.get('is_foreign'):
             parts.append("(Если это иностранный абитуриент, то ищи программы для приёма иностранных граждан)")
+        if user_data.get('preferred_form'):
+            parts.append(f"Предпочтительная форма обучения: {user_data['preferred_form']} (учитывай только программы с этой формой)")
         
         if user_data.get('exams'):
             parts.append(f"\nДанные о результатах ЕГЭ - также учти их!")

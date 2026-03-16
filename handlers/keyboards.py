@@ -49,6 +49,7 @@ def get_cities_menu():
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.add(
         types.KeyboardButton('Казань'),
+        types.KeyboardButton('Набережные Челны'),
         types.KeyboardButton('Елабуга')
     )
     return menu
@@ -67,6 +68,31 @@ def get_elabuga_departments_menu():
     """Меню выбора отделения Елабужского института КФУ"""
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     for btn_text in ELABUGA_DEPARTMENT_TO_CODE:
+        menu.add(types.KeyboardButton(btn_text))
+    return menu
+
+# --- Набережные Челны: дерево решений (форма обучения → институт) ---
+# 1) Обязательный вопрос: форма обучения в Челнах
+CHELNY_FORM_OPTIONS = ("Очная", "Заочная", "Очно-заочная")
+
+def get_chelny_form_menu():
+    """Меню выбора формы обучения в Набережных Челнах"""
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    for opt in CHELNY_FORM_OPTIONS:
+        menu.add(types.KeyboardButton(opt))
+    return menu
+
+# 2) Выбор области → институт(ы) в Челнах
+CHELNY_AREA_TO_INSTITUTES = {
+    "Техника и технологии": ["ЧелнИ_ВТШ"],
+    "Экономика, право и гуманитарные науки": ["ЧелнИ_ВШЭиП"],
+    "Пока не определился": ["ЧелнИ_ВТШ", "ЧелнИ_ВШЭиП"],
+}
+
+def get_chelny_area_menu():
+    """Меню выбора области для института в Набережных Челнах"""
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    for btn_text in CHELNY_AREA_TO_INSTITUTES:
         menu.add(types.KeyboardButton(btn_text))
     return menu
 

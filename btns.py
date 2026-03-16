@@ -70,9 +70,9 @@ biology_menu.add(bio_btn_1, bio_btn_2)
 
 
 city_1 = types.KeyboardButton(text='Казань')
-#city_2 = types.KeyboardButton(text='Набережные Челны')
+city_2 = types.KeyboardButton(text='Набережные Челны')
 cities_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-cities_menu.add(city_1)
+cities_menu.add(city_1, city_2)
 
 human_science_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 human_btn_1 = types.KeyboardButton(text='Психология')

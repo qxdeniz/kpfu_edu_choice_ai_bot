@@ -124,6 +124,10 @@ def handle_message(message):
             handle_ege_score(message, state)
         elif step == "elabuga_department_selection":
             handle_elabuga_department_selection(message, state)
+        elif step == "chelny_form_selection":
+            handle_chelny_form_selection(message, state)
+        elif step == "chelny_area_selection":
+            handle_chelny_area_selection(message, state)
         elif step == "direction_selection":
             handle_direction_selection(message, state)
         elif step.startswith("direction_sub_"):
@@ -267,6 +271,13 @@ def handle_ege_status(message, state):
                 reply_markup=get_elabuga_departments_menu()
             )
             state.step = "elabuga_department_selection"
+        elif state.get("city") == "Набережные Челны":
+            bot.send_message(
+                message.chat.id,
+                "📅 Выберите желаемую форму обучения в Набережных Челнах",
+                reply_markup=get_chelny_form_menu()
+            )
+            state.step = "chelny_form_selection"
         else:
             bot.send_message(
                 message.chat.id,
@@ -362,6 +373,13 @@ def handle_ege_score(message, state):
             reply_markup=get_elabuga_departments_menu()
         )
         state.step = "elabuga_department_selection"
+    elif state.get("city") == "Набережные Челны":
+        bot.send_message(
+            message.chat.id,
+            "📅 Выберите желаемую форму обучения в Набережных Челнах",
+            reply_markup=get_chelny_form_menu()
+        )
+        state.step = "chelny_form_selection"
     else:
         bot.send_message(
             message.chat.id,
@@ -369,6 +387,36 @@ def handle_ege_score(message, state):
             reply_markup=get_directions_menu()
         )
         state.step = "direction_selection"
+
+def handle_chelny_form_selection(message, state):
+    """Обработка выбора формы обучения в Набережных Челнах"""
+    if message.text not in CHELNY_FORM_OPTIONS:
+        bot.send_message(
+            message.chat.id,
+            "❌ Пожалуйста, выберите форму обучения из предложенных вариантов.",
+            reply_markup=get_chelny_form_menu()
+        )
+        return
+    state.update(chelny_form=message.text)
+    bot.send_message(
+        message.chat.id,
+        "🏛️ Какое направление Вам ближе? (выберите институт по профилю)",
+        reply_markup=get_chelny_area_menu()
+    )
+    state.step = "chelny_area_selection"
+
+def handle_chelny_area_selection(message, state):
+    """Обработка выбора области/института в Набережных Челнах"""
+    if message.text not in CHELNY_AREA_TO_INSTITUTES:
+        bot.send_message(
+            message.chat.id,
+            "❌ Пожалуйста, выберите вариант из предложенных.",
+            reply_markup=get_chelny_area_menu()
+        )
+        return
+    institutes = CHELNY_AREA_TO_INSTITUTES[message.text]
+    state.update(institutes=institutes, interest_area=message.text, preferred_form=state.get("chelny_form"))
+    proceed_to_questions(message, state)
 
 def handle_elabuga_department_selection(message, state):
     """Обработка выбора отделения Елабужского института КФУ"""
@@ -595,7 +643,9 @@ def find_program(message, state):
         "personal_questions": list(zip(
             state.get("questions", []),
             state.get("personal_answers", [])
-        ))
+        )),
+        "preferred_form": state.get("preferred_form"),  # для Набережных Челнов: Очная/Заочная/Очно-заочная
+        "institutes": state.get("institutes", []),
     }
     
     institutes = state.get("institutes", [])
