@@ -55,9 +55,15 @@ class DataLoader:
     
     def filter_programs_by_foreign(self, programs: List[Dict[str, Any]], is_foreign: bool = False) -> List[Dict[str, Any]]:
         """Фильтрация программ для иностранных граждан"""
+        def _profile_str(p: Dict[str, Any]) -> str:
+            # В JSON профили могут быть null -> p.get("profile") вернёт None
+            # Явно приводим к строке, чтобы избежать TypeError при использовании оператора `in`
+            value = p.get("profile")
+            return value if isinstance(value, str) else ""
+
         if is_foreign:
-            return [p for p in programs if "(для приема иностранных граждан)" in p.get("profile", "")]
-        return [p for p in programs if "(для приема иностранных граждан)" not in p.get("profile", "")]
+            return [p for p in programs if "(для приема иностранных граждан)" in _profile_str(p)]
+        return [p for p in programs if "(для приема иностранных граждан)" not in _profile_str(p)]
 
 # Глобальный экземпляр загрузчика данных
 data_loader = DataLoader()
