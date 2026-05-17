@@ -15,6 +15,7 @@ print("test d")
 # Добавляем корневую директорию в путь
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 from config import TELEGRAM_BOT_TOKEN
 from handlers.user_state import state_manager
 from handlers.keyboards import *
